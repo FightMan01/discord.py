@@ -352,7 +352,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
 
         msg = json.loads(msg)
 
-        log.debug('For Shard ID %s: WebSocket Event: %s', self.shard_id, msg)
+        #log.debug('For Shard ID %s: WebSocket Event: %s', self.shard_id, msg)
         self._dispatch('socket_response', msg)
 
         op = msg.get('op')
@@ -743,7 +743,7 @@ class DiscordVoiceWebSocket(websockets.client.WebSocketClientProtocol):
 
     async def poll_event(self):
         try:
-            msg = await asyncio.wait_for(self.recv(), timeout=30.0)
+            msg = await asyncio.wait_for(self.recv(), timeout=60.0)
             await self.received_message(json.loads(msg))
         except websockets.exceptions.ConnectionClosed as exc:
             raise ConnectionClosed(exc, shard_id=None) from exc
