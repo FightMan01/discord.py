@@ -57,7 +57,6 @@ try:
 except ImportError:
     has_nacl = False
 
-
 log = logging.getLogger(__name__)
 
 class VoiceClient:
@@ -207,6 +206,22 @@ class VoiceClient:
 
         self._handshake_complete.set()
 
+    @property
+    def latency(self):
+        """:class:`float`: Latency between a HEARTBEAT and a HEARTBEAT_ACK in seconds.
+
+        This could be referred to as the Discord Voice WebSocket latency and is
+        an analogue of user's voice latencies as seen in the Discord client.
+        """
+        ws = self.ws
+        return float("inf") if not ws else ws.latency
+
+    @property
+    def average_latency(self):
+        """:class:`float`: Average of most recent 20 HEARTBEAT latencies in seconds."""
+        ws = self.ws
+        return float("inf") if not ws else ws.average_latency
+
     async def connect(self, *, reconnect=True, _tries=0, do_handshake=True):
         log.info('Connecting to voice...')
         try:
@@ -238,16 +253,19 @@ class VoiceClient:
 
     async def poll_voice_ws(self, reconnect):
         backoff = ExponentialBackoff()
-        while True:
+        while self.ws:
             try:
                 await self.ws.poll_event()
             except (ConnectionClosed, asyncio.TimeoutError) as exc:
                 if isinstance(exc, ConnectionClosed):
                     # The following close codes are undocumented so I will document them here.
                     # 1000 - normal closure (obviously)
+                    # None - normal closure (bug)
                     # 4014 - voice channel has been deleted.
                     # 4015 - voice server has crashed
-                    if exc.code in (1000, 4014, 4015):
+                    if exc.code == None:
+                        exc.code = 4000
+                    if exc.code in (1000, 4014, 4015, 4000):
                         log.info('Disconnecting from voice normally, close code %d.', exc.code)
                         await self.disconnect()
                         break
@@ -281,7 +299,7 @@ class VoiceClient:
 
         try:
             if self.ws:
-                await self.ws.close()
+                await self.ws.close(4000)
 
             await self.terminate_handshake(remove=True)
         finally:
@@ -341,7 +359,6 @@ class VoiceClient:
         self.checked_add('_lite_nonce', 1, 4294967295)
 
         return header + box.encrypt(bytes(data), bytes(nonce)).ciphertext + nonce[:4]
-
 
     def play(self, source, *, after=None):
         """Plays an :class:`AudioSource`.
